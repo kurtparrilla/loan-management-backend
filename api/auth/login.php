@@ -5,6 +5,10 @@ header('Content-Type: application/json');
 require_once '../../config/database.php';
 require_once '../../helpers/response.php';
 
+if($_SERVER['REQUEST_METHOD'] !== 'POST'){
+    sendResponse('error', 'Method not Allowed', null, 405);
+    exit;
+} 
 $body = json_decode(file_get_contents('php://input'), true);
 
 if(empty($body['username']) || empty($body['password'])){
@@ -19,9 +23,10 @@ try{
     if(!$user || !password_verify($body['password'], $user['password_hash'])){
         sendResponse('error', 'Invalid email or password', null, 401);
     }
-    session_start();
-    $_SESSION['user_id'] = $user['user_id'];
-    $_SESSION['username'] = $user['username'];
+    $responseData = [
+        'user_id'  => $user['user_id'],
+        'username' => $user['username'],
+    ];
     if(!empty($body['remember_me']) && $body['remember_me'] === true){
         $selector = bin2hex(random_bytes(16));
         $validator = bin2hex(random_bytes(32));
@@ -34,20 +39,11 @@ try{
             ':token' => $storedToken,
             ':expires_at' => $expires_at
         ]);
-        setcookie(
-            'remember_me',
-            $selector . ':' . $validator,
-            time() + (30*24*60*60),
-            '/',
-            '',
-            false,
-            true
-        );
+        $rawToken = $selector . ':' . $validator;
+        $responseData['token']      = $rawToken;
+        $responseData['expires_at'] = $expires_at;
     }
-    sendResponse('success', 'Login successful', [
-        'user_id' => $user['user_id'],
-        'username' => $user['username']
-    ]);
+    sendResponse('success', 'Login successful', $responseData);
 }catch(PDOException $e){
     sendResponse('error', 'Login Failed: ' . $e->getMessage(), null, 500);
 }

@@ -1,8 +1,14 @@
 <?php
 header ('Access-Control-Allow-Origin: *'); // PLEASE CHANGE THIS SHIT LATER BROO HAHHA
 header ('Content-Type: application/json');
+
 require_once '../../config/database.php';
 require_once '../../helpers/response.php';
+
+if($_SERVER['REQUEST_METHOD'] !== 'POST'){
+    sendResponse('error', 'Method not Allowed', null, 405);
+    exit;
+}
 
 $body = json_decode(file_get_contents('php://input'), true);
 if(empty($body['username']) ||  empty($body['email']) || empty($body['password'])){

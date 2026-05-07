@@ -1,43 +1,34 @@
 <?php
-function requireAuth(){
-    if(session_status() !== PHP_SESSION_ACTIVE){
-        session_start();
+require_once __DIR__ . '/response.php';
+function requireAuthUserId(PDO $conn): int
+{
+    $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+    if (!preg_match('/Bearer\s+(.+)/i', $authHeader, $m)) {
+        sendResponse('error', 'Missing bearer token', null, 401);
     }
-
-    if(!empty($_SESSION['user_id'])){
-        return;
+    $rawToken = trim($m[1]); 
+    [$selector, $validator] = array_pad(explode(':', $rawToken, 2), 2, null);
+    if (empty($selector) || empty($validator)) {
+        sendResponse('error', 'Invalid token format', null, 401);
     }
-
-    $cookieToken = $_COOKIE['remember_me'] ?? $_COOKIE['remember_token'] ?? null;
-    if(!empty($cookieToken) && strpos($cookieToken, ':') !== false){
-        require_once __DIR__ . '/../config/database.php';
-        $db = new Database();
-        $conn = $db->connect();
-
-        [$selector, $validator] = explode(':', $cookieToken, 2);
-
-        $stmt = $conn->prepare("
-            SELECT t.token, u.user_id, u.username
-            FROM auth_tokens t
-            JOIN users u ON t.user_id = u.user_id
-            WHERE t.token LIKE :selector_prefix
-              AND t.expires_at > NOW()
-            LIMIT 1
-        ");
-        $stmt->execute([':selector_prefix' => $selector . ':%']);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if($row && strpos($row['token'], ':') !== false){
-            [, $storedValidatorHash] = explode(':', $row['token'], 2);
-            if(password_verify($validator, $storedValidatorHash)){
-                $_SESSION['user_id'] = $row['user_id'];
-                $_SESSION['username'] = $row['username'];
-                return;
-            }
-        }
+    $stmt = $conn->prepare("
+        SELECT token_id, user_id, token, expires_at
+        FROM auth_tokens
+        WHERE token LIKE :selector_pattern
+        ORDER BY token_id DESC
+        LIMIT 1
+    ");
+    $stmt->execute([':selector_pattern' => $selector . ':%']);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) {
+        sendResponse('error', 'Token not found', null, 401);
     }
-
-    http_response_code(401);
-    echo json_encode(['status' => 'error', 'message' => 'Unauthorized. Please log in.']);
-    exit();
+    if (strtotime($row['expires_at']) < time()) {
+        sendResponse('error', 'Token expired', null, 401);
+    }
+    [, $storedValidatorHash] = array_pad(explode(':', $row['token'], 2), 2, null);
+    if (empty($storedValidatorHash) || !password_verify($validator, $storedValidatorHash)) {
+        sendResponse('error', 'Invalid token', null, 401);
+    }
+    return (int)$row['user_id'];
 }
