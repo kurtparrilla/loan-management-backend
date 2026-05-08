@@ -104,5 +104,5 @@ CREATE TABLE auth_tokens (
 CREATE INDEX idx_loans_status ON loans(status);
 CREATE INDEX idx_schedules_due_status ON loan_schedules(due_date, status);
 CREATE INDEX idx_payments_date ON payments(payment_date);
-CREATE INDEX idx_allocations_payment ON payment_allocations(payment_id)
+CREATE INDEX idx_allocations_payment ON payment_allocations(payment_id);
 CREATE INDEX idx_allocations_schedule ON payment_allocations(schedule_id);
