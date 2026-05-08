@@ -60,22 +60,72 @@ try{
         $borrowerId = (int)$conn->lastInsertId();
     }
     $l = $body['loan'];
-    $stmtLoan = $conn->prepare("INSERT INTO loans (borrower_id, principal_amount, interest_rate, payment_frequency, number_of_installments, start_date, end_date) VALUES (:borrower_id, :principal_amount, :interest_rate, :payment_frequency, :number_of_installments, :start_date, :end_date)");
+    $stmtLoan = $conn->prepare("INSERT INTO loans (borrower_id, principal_amount, interest_rate, payment_frequency, number_of_installments, start_date) VALUES (:borrower_id, :principal_amount, :interest_rate, :payment_frequency, :number_of_installments, :start_date)");
     $stmtLoan->execute([
         ':borrower_id' => $borrowerId,
         ':principal_amount' => $l['principal_amount'] ?? null,
         ':interest_rate' => $l['interest_rate'] ?? 0,
         ':payment_frequency' => $l['payment_frequency'] ?? null,
         ':number_of_installments' => $l['number_of_installments'] ?? null,
-        ':start_date' => $l['start_date'] ?? null,
-        ':end_date' => $l['end_date'] ?? null,
+        ':start_date' => $l['start_date'] ?? null
     ]);
     $loanId = (int)$conn->lastInsertId();
+
+
+    $principal = (float)$l['principal_amount'];
+    $interestRate = (float)($l['interest_rate'] ?? 0);
+    $installments = (int)($l['number_of_installments'] ?? 0);
+    $frequency    = $l['payment_frequency'] ?? null;
+    $startDate = new DateTime($l['start_date']);
+
+    if (empty($installments) || $installments <= 0) {
+        sendResponse('error', 'Installments must be greater than 0', null, 400);
+        exit;
+    }   
+
+    $principalPerInstallment = round($principal / $installments, 2);
+    $interestPerInstallment = round($principal * ($interestRate / 100), 2);
+
+    $stmtSchedule = $conn->prepare("
+                                    INSERT INTO loan_schedules (loan_id, installment_number, due_date, expected_principal, expected_interest, status)
+                                    VALUES (:loan_id, :installment_number, :due_date, :expected_principal, :expected_interest, 'pending')");
+    $lastDueDate = null;
+
+    for ($i = 1; $i <= $installments; $i++) {
+        $dueDate = clone $startDate;
+
+        match($frequency) {
+            'weekly'    => $dueDate->modify("+{$i} week"),
+            'biweekly'  => $dueDate->modify("+" . ($i * 2) . " week"),
+            'monthly'   => $dueDate->modify("+{$i} month"),
+            'quarterly' => $dueDate->modify("+" . ($i * 3) . " month"),
+            'yearly'    => $dueDate->modify("+{$i} year"),
+            'lump_sum'  => $dueDate->modify("+{$i} month"),
+            default     => $dueDate->modify("+{$i} month"),
+        };
+
+        $stmtSchedule->execute([
+            ':loan_id'            => $loanId,
+            ':installment_number' => $i,
+            ':due_date'           => $dueDate->format('Y-m-d'),
+            ':expected_principal' => $principalPerInstallment,
+            ':expected_interest'  => $interestPerInstallment
+        ]);
+
+        $lastDueDate = $dueDate->format('Y-m-d');
+    }
+    $stmtUpdateLoan = $conn->prepare("UPDATE loans SET end_date = :end_date WHERE loan_id = :loan_id");
+    $stmtUpdateLoan->execute([
+        ':end_date' => $lastDueDate,
+        ':loan_id'  => $loanId
+    ]);
     $conn->commit();
-    sendResponse('success', 'Loan created successfully',[
-        'mode' => $mode,
-        'borrower_id' => $borrowerId,
-        'loan_id' => $loanId
+    sendResponse('success', 'Loan created successfully', [
+        'mode'                   => $mode,
+        'borrower_id'            => $borrowerId,
+        'loan_id'                => $loanId,
+        'end_date'               => $lastDueDate,
+        'installments_generated' => $installments
     ], 201);
 }catch(PDOException $e){
     if ($conn->inTransaction()) {
@@ -83,3 +133,4 @@ try{
     }
     sendResponse('error', 'Create failed: ' . $e->getMessage(), null, 500);
 }
+

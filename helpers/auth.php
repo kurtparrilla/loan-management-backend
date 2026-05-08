@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/response.php';
+
 function requireAuthUserId(PDO $conn): int
 {
     $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
