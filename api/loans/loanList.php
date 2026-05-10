@@ -1,5 +1,30 @@
 <?php
-header('Access-Control-Allow-Origin: *');
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+$allowedOriginsRaw = getenv('CORS_ALLOWED_ORIGINS') ?: ($_ENV['CORS_ALLOWED_ORIGINS'] ?? '');
+if ($allowedOriginsRaw === '') {
+    $envPath = __DIR__ . '/../../.env';
+    if (!file_exists($envPath)) {
+        $envPath = __DIR__ . '/../.env';
+    }
+    if (file_exists($envPath)) {
+        $lines = file($envPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        foreach ($lines as $line) {
+            if (strpos(trim($line), '#') === 0 || strpos($line, '=') === false) {
+                continue;
+            }
+            [$key, $value] = explode('=', $line, 2);
+            if (trim($key) === 'CORS_ALLOWED_ORIGINS') {
+                $allowedOriginsRaw = trim($value);
+                break;
+            }
+        }
+    }
+}
+$allowedOrigins = array_filter(array_map('trim', explode(',', $allowedOriginsRaw)));
+if ($origin !== '' && in_array($origin, $allowedOrigins, true)) {
+    header("Access-Control-Allow-Origin: $origin");
+    header('Vary: Origin');
+}
 header('Access-Control-Allow-Methods: GET, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
 header('Content-Type: application/json');
