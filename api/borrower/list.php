@@ -34,9 +34,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-require_once __DIR__ . '/../config/database.php';
-require_once __DIR__ . '/../helpers/response.php';
-require_once __DIR__ . '/../helpers/auth.php';
+require_once __DIR__ . '../../config/database.php';
+require_once __DIR__ . '../../helpers/response.php';
+require_once __DIR__ . '../../helpers/auth.php';
 
 if($_SERVER['REQUEST_METHOD'] !== 'GET') {
     sendResponse('error', 'Method not allowed', null, 405);
