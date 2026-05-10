@@ -4,17 +4,18 @@ header('Access-Control-Allow-Methods: GET, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
 header('Content-Type: application/json');
 
-require_once __DIR__ . '/../config/database.php';
-require_once __DIR__ . '/../helpers/response.php';
-require_once __DIR__ . '/../helpers/auth.php';
-
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(204);
     exit;
 }
 
-if ($_SERVER['REQUEST_METHOD'] != 'GET') {
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../helpers/response.php';
+require_once __DIR__ . '/../helpers/auth.php';
+
+if($_SERVER['REQUEST_METHOD'] !== 'GET') {
     sendResponse('error', 'Method not allowed', null, 405);
+    exit;
 }
 
 $db = new Database();

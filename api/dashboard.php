@@ -159,12 +159,36 @@ try{
                                             ");
     $stmt_recent_payments->execute();
     $recent_payments = $stmt_recent_payments->fetchAll(PDO::FETCH_ASSOC);
+
+    $stmt_reminders = $conn->prepare("
+                                    SELECT
+                                       CONCAT(b.first_name, ' ', b.last_name) AS borrower_name,
+                                       GREATEST(ls.expected_total - COALESCE(p.paid_so_far, 0), 0) AS amount_due,
+                                       DATEDIFF(CURDATE(), ls.due_date) AS days_overdue
+                                    FROM loan_schedules ls
+                                    JOIN loans l ON l.loan_id = ls.loan_id
+                                    JOIN borrowers b ON b.borrower_id = l.borrower_id
+                                    LEFT JOIN (
+                                        SELECT schedule_id, SUM(amount_applied) AS paid_so_far
+                                        FROM payment_allocations
+                                        GROUP BY schedule_id
+                                    ) p ON p.schedule_id = ls.schedule_id
+                                    WHERE l.status = 'active'
+                                      AND ls.status <> 'paid'
+                                      AND ls.due_date < CURDATE()
+                                      AND b.created_by = :user_id
+                                    ORDER BY days_overdue DESC, ls.due_date ASC
+                                    LIMIT 5;
+                                    ");
+    $stmt_reminders->execute([':user_id' => $userId]);
+    $reminders = $stmt_reminders->fetchAll(PDO::FETCH_ASSOC);
     sendResponse('success', 'Dashboard fetched',[
         'cards' => $cards,
         'loan_counts' => $loan_counts,
         'loan_summary' => $loan_summary,
         'upcoming_schedule' => $upcoming_schedule,
-        'recent_payments' => $recent_payments
+        'recent_payments' => $recent_payments,
+        'reminders' => $reminders
     ]);
 }catch(PDOException $e){
     error_log($e->getMessage());
